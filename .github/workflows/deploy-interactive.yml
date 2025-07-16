@@ -26,27 +26,16 @@ jobs:
       - name: Install Dependencies and Build
         run: |
           pip install -r requirements.txt
-          npm install @openzeppelin/contracts
           python build.py
-
-      # این مرحله کلیدی در نسخه قبلی من جا افتاده بود
-      - name: Prepare Ethers.js for Deployment
-        run: |
-          mkdir -p lib
-          curl -L https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js -o lib/ethers.umd.min.js
 
       - name: Organize files for deployment
         run: |
-          mkdir -p public
+          mkdir public
           cp index.html ./public/
           cp deploy-ui.js ./public/
           cp artifacts.json ./public/
-          # این خطوط تضمین می‌کنند که تمام فایل‌های لازم کپی شوند
           cp verification_*.json ./public/
-          cp -r contracts ./public/
-          cp -r lib ./public/
-          cp -r node_modules/@openzeppelin ./public/node_modules/
-          
+
       - name: Deploy UI to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
