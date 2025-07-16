@@ -2,8 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const solc = require('solc');
 
-// لیست تمام قراردادهایی که باید کامپایل شوند
-const contractPaths = [
+// لیست قراردادهای اصلی شما
+const mainContractPaths = [
     "contracts/YazdParadiseNFT.sol",
     "contracts/ParsToken.sol",
     "contracts/MainContract.sol",
@@ -13,65 +13,111 @@ const contractPaths = [
     "contracts/SimpleContract.sol"
 ];
 
-// ساختار ورودی استاندارد برای کامپایلر سالیدیتی
-const input = {
-    language: 'Solidity',
-    sources: {},
-    settings: {
-        outputSelection: {
-            '*': {
-                '*': ['abi', 'evm.bytecode']
-            }
-        }
-    }
-};
-
-// خواندن محتوای هر فایل قرارداد و افزودن به آبجکت ورودی
-contractPaths.forEach(filePath => {
-    const source = fs.readFileSync(filePath, 'utf8');
-    const contractFileName = path.basename(filePath);
-    input.sources[contractFileName] = { content: source };
-});
-
-// تابعی برای پیدا کردن و خواندن فایل‌های import شده (مخصوص OpenZeppelin)
+// تابع برای پیدا کردن و خواندن فایل‌های import شده
 function findImports(relativePath) {
-    // مسیر کامل فایل‌های OpenZeppelin در پوشه node_modules را پیدا می‌کند
     const ozPath = path.resolve(__dirname, 'node_modules', relativePath);
     if (fs.existsSync(ozPath)) {
         return { contents: fs.readFileSync(ozPath, 'utf8') };
     }
+    // برای import های نسبی مانند ./Contract.sol
+    const localPath = path.resolve(__dirname, relativePath);
+     if (fs.existsSync(localPath)) {
+        return { contents: fs.readFileSync(localPath, 'utf8') };
+    }
     return { error: 'File not found' };
 }
 
-// کامپایل کردن قراردادها
-const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports }));
-
-// بررسی خطاها در حین کامپایل
-if (output.errors) {
-    let hasError = false;
-    output.errors.forEach(err => {
-        // فقط خطاهای جدی (error) را نمایش بده، نه هشدارها (warning)
-        if (err.severity === 'error') {
-            console.error(err.formattedMessage);
-            hasError = true;
-        }
+// --- بخش اصلی کامپایل برای artifacts.json ---
+function compileForArtifacts() {
+    const input = {
+        language: 'Solidity',
+        sources: {},
+        settings: { outputSelection: { '*': { '*': ['abi', 'evm.bytecode'] } } }
+    };
+    mainContractPaths.forEach(filePath => {
+        input.sources[path.basename(filePath)] = { content: fs.readFileSync(filePath, 'utf8') };
     });
-    // اگر خطایی وجود داشت، فرآیند را متوقف کن
-    if(hasError) process.exit(1);
-}
 
-// استخراج ABI و بایت‌کد از خروجی کامپایلر
-const artifacts = {};
-for (const fileName in output.contracts) {
-    for (const contractName in output.contracts[fileName]) {
-        artifacts[contractName] = {
-            abi: output.contracts[fileName][contractName].abi,
-            bytecode: '0x' + output.contracts[fileName][contractName].evm.bytecode.object
-        };
+    const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports }));
+
+    if (output.errors) {
+        let hasError = false;
+        output.errors.forEach(err => {
+            if (err.severity === 'error') {
+                console.error(err.formattedMessage);
+                hasError = true;
+            }
+        });
+        if (hasError) process.exit(1);
     }
+
+    const artifacts = {};
+    for (const fileName in output.contracts) {
+        for (const contractName in output.contracts[fileName]) {
+            artifacts[contractName] = {
+                abi: output.contracts[fileName][contractName].abi,
+                bytecode: '0x' + output.contracts[fileName][contractName].evm.bytecode.object
+            };
+        }
+    }
+    fs.writeFileSync('artifacts.json', JSON.stringify(artifacts, null, 2));
+    console.log('✅ artifacts.json created successfully!');
 }
 
-// نوشتن خروجی نهایی در فایل artifacts.json
-fs.writeFileSync('artifacts.json', JSON.stringify(artifacts, null, 2));
 
-console.log('✅ Contracts compiled successfully! ABI and Bytecode saved to artifacts.json');
+// --- بخش جدید برای ساخت فایل‌های وریفای ---
+function generateVerificationFiles() {
+    console.log('\nGenerating verification files...');
+    mainContractPaths.forEach(mainPath => {
+        const sources = {};
+        const filesToProcess = [mainPath];
+        const processedFiles = new Set();
+
+        while (filesToProcess.length > 0) {
+            const currentPath = filesToProcess.pop();
+            if (processedFiles.has(currentPath)) continue;
+            
+            const absolutePath = path.resolve(__dirname, currentPath);
+            if (!fs.existsSync(absolutePath)) {
+                console.warn(`Warning: could not find file ${currentPath}`);
+                continue;
+            }
+
+            processedFiles.add(currentPath);
+            const sourceCode = fs.readFileSync(absolutePath, 'utf8');
+            // کلید باید مسیر نسبی باشد که کامپایلر انتظار دارد
+            sources[currentPath] = { content: sourceCode };
+
+            const importRegex = /import\s+"([^"]+)";/g;
+            let match;
+            while ((match = importRegex.exec(sourceCode)) !== null) {
+                let importPath = match[1];
+                let resolvedPath;
+                if (importPath.startsWith('@openzeppelin/')) {
+                    resolvedPath = 'node_modules/' + importPath;
+                } else {
+                    resolvedPath = path.join(path.dirname(currentPath), importPath);
+                }
+                filesToProcess.push(resolvedPath);
+            }
+        }
+
+        const verificationInput = {
+            language: 'Solidity',
+            sources: sources,
+            settings: {
+                optimizer: { enabled: false, runs: 200 },
+                outputSelection: { "*": { "*": [ "abi", "evm.bytecode" ] } }
+            }
+        };
+        
+        const contractName = path.basename(mainPath, '.sol');
+        const outputFilename = `verification_${contractName}.json`;
+        fs.writeFileSync(outputFilename, JSON.stringify(verificationInput, null, 2));
+        console.log(`  -> Created ${outputFilename}`);
+    });
+}
+
+// اجرای هر دو تابع
+compileForArtifacts();
+generateVerificationFiles();
