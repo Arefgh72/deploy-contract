@@ -1,8 +1,23 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // ... (تمام متغیرهای UI و توابع کمکی اولیه مثل قبل) ...
-    // getStoredDeployments, saveDeployments, log, clearLogs, showView, 
-    // connectWallet, downloadJson, executeDeploy
+    // تعریف متغیرهای UI
+    const views = {
+        menu: document.getElementById('main-menu'),
+        yazd: document.getElementById('view-yazd'),
+        nft: document.getElementById('view-nft'),
+        token: document.getElementById('view-token'),
+        simple: document.getElementById('view-simple'),
+    };
+    const controls = document.getElementById('controls');
+    const logsDiv = document.getElementById('logs');
+    const walletInfoDiv = document.getElementById('wallet-info');
+    const verificationSection = document.getElementById('verification-section');
+    const downloadLinksDiv = document.getElementById('download-links');
 
+    let artifacts = {};
+    let signer = null;
+    let listenersAttached = false;
+
+    // --- این بخش کلیدی در نسخه قبل حذف شده بود ---
     const path = {
         dirname: (p) => p.substring(0, p.lastIndexOf('/')),
         join: (...args) => args.map((part, i) => {
@@ -11,52 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }).filter(x => x.length).join('/'),
         basename: (p) => p.substring(p.lastIndexOf('/') + 1)
     };
+    // ---------------------------------------------
 
-    // --- تابع جدید و هوشمند برای واکشی تمام سورس کدها ---
-    async function fetchSourceWithImports(initialContractPath) {
-        const sources = {};
-        const filesToProcess = [{
-            key: initialContractPath, // کلیدی که کامپایلر انتظار دارد
-            fetchPath: initialContractPath // آدرسی که ما از آن دانلود می‌کنیم
-        }];
-        const processedKeys = new Set();
-
-        while (filesToProcess.length > 0) {
-            const currentFile = filesToProcess.pop();
-            if (processedKeys.has(currentFile.key)) continue;
-
-            processedKeys.add(currentFile.key);
-            log(`   -> در حال واکشی ${currentFile.key}`);
-            
-            const response = await fetch(`./${currentFile.fetchPath}`);
-            if (!response.ok) throw new Error(`فایل سورس ${currentFile.fetchPath} یافت نشد.`);
-            const sourceCode = await response.text();
-            
-            sources[currentFile.key] = { content: sourceCode };
-
-            const importRegex = /import\s+"([^"]+)";/g;
-            let match;
-            while ((match = importRegex.exec(sourceCode)) !== null) {
-                const importKey = match[1]; // این کلید استاندارد است
-                if (processedKeys.has(importKey)) continue;
-
-                let fetchPath;
-                if (importKey.startsWith('@openzeppelin/')) {
-                    fetchPath = 'node_modules/' + importKey;
-                } else {
-                    const dir = path.dirname(currentFile.fetchPath);
-                    fetchPath = path.join(dir, importKey);
-                }
-                
-                filesToProcess.push({ key: importKey, fetchPath: fetchPath });
-            }
-        }
-        log('   -> تمام فایل‌های وابسته با موفقیت واکشی شدند.');
-        return sources;
-    }
-
-    // --- بقیه توابع بدون تغییر ---
-    // (اینجا کد کامل قرار داده می‌شود تا از هرگونه اشتباه جلوگیری شود)
     function getStoredDeployments() {
         const stored = sessionStorage.getItem('deployedContracts');
         return stored ? JSON.parse(stored) : [];
@@ -99,8 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
             log(`❌ خطا در بارگذاری فایل‌های اولیه: ${error.message}. لطفاً صفحه را رفرش کنید.`);
         }
     }
-    
-    let listenersAttached = false;
+
     async function connectWallet() {
         if (signer) return true;
         try {
@@ -128,6 +98,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function fetchSourceWithImports(initialContractPath) {
+        const sources = {};
+        const filesToProcess = [{
+            key: initialContractPath,
+            fetchPath: initialContractPath
+        }];
+        const processedKeys = new Set();
+        while (filesToProcess.length > 0) {
+            const currentFile = filesToProcess.pop();
+            if (processedKeys.has(currentFile.key)) continue;
+            processedKeys.add(currentFile.key);
+            log(`   -> در حال واکشی ${currentFile.key}`);
+            const response = await fetch(`./${currentFile.fetchPath}`);
+            if (!response.ok) throw new Error(`فایل سورس ${currentFile.fetchPath} یافت نشد.`);
+            const sourceCode = await response.text();
+            sources[currentFile.key] = { content: sourceCode };
+            const importRegex = /import\s+"([^"]+)";/g;
+            let match;
+            while ((match = importRegex.exec(sourceCode)) !== null) {
+                const importKey = match[1];
+                if (processedKeys.has(importKey)) continue;
+                let fetchPath;
+                if (importKey.startsWith('@openzeppelin/')) {
+                    fetchPath = 'node_modules/' + importKey;
+                } else {
+                    const dir = path.dirname(currentFile.fetchPath);
+                    fetchPath = path.join(dir, importKey);
+                }
+                filesToProcess.push({ key: importKey, fetchPath: fetchPath });
+            }
+        }
+        log('   -> تمام فایل‌های وابسته با موفقیت واکشی شدند.');
+        return sources;
+    }
+
     function generateStandardJsonInput(sources) {
         return {
             language: "Solidity",
@@ -151,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
-    
+
     function displayVerificationLinks(deployedContracts) {
         const downloadLinksDiv = document.getElementById('download-links');
         const verificationSection = document.getElementById('verification-section');
@@ -186,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         verificationSection.classList.remove('hidden');
     }
-    
+
     async function executeDeploy(contractName, args, button) {
         button.disabled = true;
         button.innerText = 'در حال انجام...';
@@ -206,7 +211,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // ... (تمام event listener ها اینجا قرار می‌گیرند و بدون تغییر هستند)
     document.getElementById('deploy-nft').addEventListener('click', async (e) => {
         clearLogs();
         if (!await connectWallet()) return;
@@ -265,31 +269,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!await connectWallet()) throw new Error("اتصال به کیف پول لغو شد.");
             const deployerAddress = await signer.getAddress();
             const deployedContracts = {};
-
             const factoryNFT = new ethers.ContractFactory(artifacts['YazdParadiseNFT'].abi, artifacts['YazdParadiseNFT'].bytecode, signer);
             const yazdParadiseNFT = await factoryNFT.deploy(deployerAddress);
             await yazdParadiseNFT.deployed();
             log(`-> YazdParadiseNFT در آدرس ${yazdParadiseNFT.address} دیپلوی شد.`);
             deployedContracts['YazdParadiseNFT'] = { address: yazdParadiseNFT.address };
-
             const factoryToken = new ethers.ContractFactory(artifacts['ParsToken'].abi, artifacts['ParsToken'].bytecode, signer);
             const parsToken = await factoryToken.deploy(deployerAddress);
             await parsToken.deployed();
             log(`-> ParsToken در آدرس ${parsToken.address} دیپلوی شد.`);
             deployedContracts['ParsToken'] = { address: parsToken.address };
-
             const factoryMain = new ethers.ContractFactory(artifacts['MainContract'].abi, artifacts['MainContract'].bytecode, signer);
             const mainContract = await factoryMain.deploy(deployedContracts['YazdParadiseNFT'].address, deployedContracts['ParsToken'].address, deployerAddress);
             await mainContract.deployed();
             log(`-> MainContract در آدرس ${mainContract.address} دیپلوی شد.`);
-
             const factoryProxy = new ethers.ContractFactory(artifacts['InteractFeeProxy'].abi, artifacts['InteractFeeProxy'].bytecode, signer);
             const proxyContract = await factoryProxy.deploy(mainContract.address);
             await proxyContract.deployed();
             log(`-> InteractFeeProxy در آدرس ${proxyContract.address} دیپلوی شد.`);
-
             log('\n✅ مجموعه با موفقیت دیپلوی شد.');
-
             const newDeployments = [
                 { contractClass: 'YazdParadiseNFT', contractAddress: deployedContracts['YazdParadiseNFT'].address, displayName: 'YazdParadiseNFT', type: 'Protocol-NFT', path: 'contracts/YazdParadiseNFT.sol' },
                 { contractClass: 'ParsToken', contractAddress: deployedContracts['ParsToken'].address, displayName: 'ParsToken', type: 'Protocol-Token', path: 'contracts/ParsToken.sol' },
@@ -299,7 +297,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const allDeployments = getStoredDeployments();
             saveDeployments(allDeployments.concat(newDeployments));
             displayVerificationLinks(getStoredDeployments());
-
         } catch (error) {
             log(`\n❌ عملیات با خطا مواجه شد: ${error.message}`);
         } finally {
@@ -313,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-show-token').addEventListener('click', () => showView('token'));
     document.getElementById('btn-show-simple').addEventListener('click', () => showView('simple'));
     document.getElementById('back-to-menu').addEventListener('click', () => showView(null));
-
+    
     async function initialize() {
         await loadArtifacts();
         const storedDeployments = getStoredDeployments();
