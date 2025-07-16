@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>داشبورد استقرار قرارداد هوشمند</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 600px; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 25px; margin-bottom: 20px; }
+        .hidden { display: none; }
+        h1, h2 { text-align: center; color: #333; }
+        button { background-color: #007bff; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; transition: background-color 0.2s; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #a9a9a9; cursor: not-allowed; }
+        .menu-button { margin-top: 10px; background-color: #6c757d; }
+        .menu-button:hover { background-color: #5a6268; }
+        input { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        #logs { margin-top: 20px; white-space: pre-wrap; background-color: #2b2b2b; color: #f1f1f1; border: 1px solid #ccc; padding: 15px; border-radius: 5px; font-family: monospace; min-height: 100px; max-height: 300px; overflow-y: auto; }
+        #wallet-info { text-align: center; margin-bottom: 20px; background: #e9ecef; padding: 10px; border-radius: 5px; }
+        .verification-item { border-top: 1px solid #e9ecef; padding: 15px 5px; margin-top: 10px; }
+        .verification-item:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+        .verification-item-info { font-size: 0.9em; color: #555; margin-top: 8px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>داشبورد استقرار</h1>
+
+        <div id="wallet-info" class="card hidden">
+            <p style="margin: 0; font-weight: bold;">کیف پول متصل شد!</p>
+            <p id="wallet-address" style="margin: 5px 0 0;"></p>
+            <p id="wallet-network" style="margin: 5px 0 0;"></p>
+        </div>
+
+        <div id="main-menu" class="card">
+            <h2>گزینه‌ی استقرار را انتخاب کنید:</h2>
+            <button id="btn-show-yazd">۱. استقرار مجموعه کامل "پروتکل یزد"</button>
+            <button class="menu-button" id="btn-show-nft">۲. استقرار قرارداد استاندارد NFT</button>
+            <button class="menu-button" id="btn-show-token">۳. استقرار قرارداد استاندارد توکن (ERC20)</button>
+            <button class="menu-button" id="btn-show-simple">۴. استقرار یک قرارداد ساده</button>
+        </div>
+
+        <div id="view-yazd" class="card hidden">
+            <h2>۱. استقرار پروتکل یزد</h2>
+            <p>این گزینه تمام قراردادهای مجموعه (NFT, ParsToken, Main, Proxy) را دیپلوی و تنظیم می‌کند.</p>
+            <button id="deploy-yazd">شروع استقرار</button>
+        </div>
+
+        <div id="view-nft" class="card hidden">
+            <h2>۲. استقرار قرارداد NFT</h2>
+            <label for="nft-name">نام NFT:</label>
+            <input type="text" id="nft-name" placeholder="مثلاً: My Awesome Collection">
+            <label for="nft-symbol">نماد NFT:</label>
+            <input type="text" id="nft-symbol" placeholder="مثلاً: MAC">
+            <button id="deploy-nft">استقرار NFT</button>
+        </div>
+
+        <div id="view-token" class="card hidden">
+            <h2>۳. استقرار قرارداد توکن (ERC20)</h2>
+            <label for="token-name">نام توکن:</label>
+            <input type="text" id="token-name" placeholder="مثلاً: Super Coin">
+            <label for="token-symbol">نماد توکن:</label>
+            <input type="text" id="token-symbol" placeholder="مثلاً: SPC">
+            <button id="deploy-token">استقرار توکن</button>
+        </div>
+
+        <div id="view-simple" class="card hidden">
+            <h2>۴. استقرار قرارداد ساده</h2>
+            <p>این گزینه یک قرارداد هوشمند ساده و خالی (Ownable) را دیپلوی می‌کند.</p>
+            <button id="deploy-simple">استقرار قرارداد ساده</button>
+        </div>
+
+        <div id="controls" class="card hidden">
+            <button id="back-to-menu">بازگشت به منوی اصلی</button>
+        </div>
+        
+        <div id="verification-section" class="card hidden">
+            <h2>اطلاعات وریفای قرارداد</h2>
+            <p>
+                برای اینکه دیگران بتوانند به کد قرارداد شما اعتماد کنند، باید آن را در اکسپلوررهای بلاکچین (مانند Etherscan) "وریفای" کنید. این کار به همه نشان می‌دهد که کد شما دقیقاً همان چیزی است که دیپلوی کرده‌اید. برای انجام این کار، به فایل "Standard JSON" نیاز دارید. لطفاً فایل مربوط به هر قرارداد را دانلود کنید.
+            </p>
+            <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                <ul style="padding-right: 20px; line-height: 1.8;">
+                    <li><strong>Compiler Version:</strong> <span>v0.8.28+commit.7893614a</span></li>
+                    <li><strong>License:</strong> <span>MIT</span></li>
+                    <li><strong>Optimization:</strong> <span>Disabled</span></li>
+                </ul>
+            </div>
+            <div id="download-links"></div>
+        </div>
+        
+        <div class="card">
+            <h3>خروجی و لاگ‌ها:</h3>
+            <div id="logs">برای مشاهده‌ی مراحل، یک گزینه را استقرار دهید...</div>
+        </div>
+    </div>
+
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+    <script src="./deploy-ui.js"></script>
+</body>
+</html>
