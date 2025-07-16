@@ -1,16 +1,13 @@
 # پوشه وابستگی‌ها که توسط npm ساخته می‌شود
 /node_modules
 
-# فایل خروجی کامپایلر
-/artifacts.json
-
 # فایل‌های لاگ و گزارش خطا
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# فایل‌های متغیرهای محیطی (برای پروژه‌های بزرگتر)
+# فایل‌های متغیرهای محیطی
 .env
 .env.local
 .env.development.local
