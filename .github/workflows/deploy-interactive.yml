@@ -29,9 +29,8 @@ jobs:
 
       - name: Prepare Ethers.js for Deployment
         run: |
-          # چون دیگر npm install کامل نداریم، این کتابخانه را مستقیم دانلود می‌کنیم
-          mkdir -p lib
-          curl -L https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js -o lib/ethers.umd.min.js
+           mkdir -p lib
+           curl -L https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js -o lib/ethers.umd.min.js
 
       - name: Organize files for deployment
         run: |
