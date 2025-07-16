@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const solc = require('solc');
 
-// لیست قراردادهای اصلی شما که برای هر کدام یک فایل وریفای ساخته می‌شود
+// لیست قراردادهای اصلی شما
 const mainContractFiles = [
     "YazdParadiseNFT.sol",
     "ParsToken.sol",
@@ -13,32 +13,31 @@ const mainContractFiles = [
     "SimpleContract.sol"
 ];
 
-// --- بخش ۱: کامپایل برای artifacts.json (برای استفاده در UI) ---
+function findImports(importPath) {
+    try {
+        // ابتدا تلاش برای پیدا کردن در node_modules
+        const fullPath = require.resolve(importPath, { paths: [path.resolve(__dirname, 'node_modules')] });
+        return { contents: fs.readFileSync(fullPath, 'utf8') };
+    } catch (e) {
+        try {
+            // سپس تلاش برای پیدا کردن در پوشه contracts
+            const fullPath = require.resolve(importPath, { paths: [path.resolve(__dirname, 'contracts')] });
+            return { contents: fs.readFileSync(fullPath, 'utf8') };
+        } catch (e2) {
+            return { error: `File not found: ${importPath}` };
+        }
+    }
+}
+
 function compileForArtifacts() {
     const input = {
         language: 'Solidity',
         sources: {},
         settings: { outputSelection: { '*': { '*': ['abi', 'evm.bytecode'] } } }
     };
-
     mainContractFiles.forEach(fileName => {
         input.sources[fileName] = { content: fs.readFileSync(path.resolve(__dirname, 'contracts', fileName), 'utf8') };
     });
-
-    // تابع callback برای پیدا کردن import ها
-    const findImports = (importPath) => {
-        try {
-            const fullPath = require.resolve(importPath, { paths: [__dirname, path.resolve(__dirname, 'contracts')] });
-            return { contents: fs.readFileSync(fullPath, 'utf8') };
-        } catch (e) {
-            try {
-                 const fullPath = require.resolve(path.join('./node_modules/', importPath));
-                 return { contents: fs.readFileSync(fullPath, 'utf8') };
-            } catch (e2) {
-                 return { error: 'File not found' };
-            }
-        }
-    };
 
     const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports }));
 
@@ -66,7 +65,6 @@ function compileForArtifacts() {
     console.log('✅ artifacts.json created successfully!');
 }
 
-// --- بخش ۲: ساخت فایل‌های وریفای کامل و جامع ---
 function generateVerificationFiles() {
     console.log('\nGenerating verification files...');
     mainContractFiles.forEach(mainFile => {
@@ -80,15 +78,16 @@ function generateVerificationFiles() {
             if (processedFiles.has(currentPath)) continue;
 
             let absolutePath;
-            // تلاش برای پیدا کردن فایل در مسیرهای مختلف
-            if (currentPath.startsWith('@openzeppelin/')) {
-                 absolutePath = require.resolve(currentPath, { paths: [path.resolve(__dirname, 'node_modules')] });
-            } else {
-                 absolutePath = path.resolve(__dirname, currentPath);
-            }
-
-            if (!fs.existsSync(absolutePath)) {
-                console.warn(`Warning: Could not find file ${currentPath}`);
+            try {
+                if (currentPath.startsWith('.')) {
+                    absolutePath = path.resolve(currentPath);
+                } else {
+                    absolutePath = require.resolve(currentPath, {
+                        paths: [path.resolve(__dirname, 'contracts'), path.resolve(__dirname, 'node_modules')]
+                    });
+                }
+            } catch (e) {
+                console.warn(`Warning: Could not resolve ${currentPath}`);
                 continue;
             }
             
@@ -100,11 +99,15 @@ function generateVerificationFiles() {
             let match;
             while ((match = importRegex.exec(sourceCode)) !== null) {
                 let importPath = match[1];
-                // نرمال‌سازی مسیر برای import های نسبی
-                 if (importPath.startsWith('./') || importPath.startsWith('../')) {
-                    importPath = path.normalize(path.join(path.dirname(currentPath), importPath));
+                let resolvedPath = importPath;
+                if (importPath.startsWith('./') || importPath.startsWith('../')) {
+                    resolvedPath = path.join(path.dirname(currentPath), importPath);
+                    // نرمال‌سازی مسیر برای حذف '..' و '.'
+                    resolvedPath = path.normalize(resolvedPath);
                 }
-                filesToProcess.push(importPath);
+                if (!processedFiles.has(resolvedPath)) {
+                    filesToProcess.push(resolvedPath);
+                }
             }
         }
 
@@ -124,6 +127,5 @@ function generateVerificationFiles() {
     });
 }
 
-// اجرای هر دو تابع
 compileForArtifacts();
 generateVerificationFiles();
