@@ -56,10 +56,18 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const address = await signer.getAddress();
             const network = await provider.getNetwork();
-            document.getElementById('wallet-address').innerText = `آدرس: ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-            document.getElementById('wallet-network').innerText = `شبکه: ${network.name} (ID: ${network.chainId})`;
-            walletInfoDiv.classList.remove('hidden');
             
+            let networkName = network.name;
+            if (networkName === "unknown") {
+                networkName = "شبکه ناشناس";
+            } else if (networkName === "homestead") {
+                networkName = "Ethereum Mainnet";
+            }
+
+            document.getElementById('wallet-address').innerText = `آدرس: ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+            document.getElementById('wallet-network').innerText = `شبکه: ${networkName} (ID: ${network.chainId})`;
+            
+            walletInfoDiv.classList.remove('hidden');
             return true;
         } catch (error) {
             log(`❌ خطا در اتصال به کیف پول: ${error.message}`);
@@ -262,12 +270,20 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-show-simple').addEventListener('click', () => showView('simple'));
     document.getElementById('back-to-menu').addEventListener('click', () => showView(null));
 
+    // --- مدیریت رویدادهای کیف پول ---
     if (window.ethereum) {
         window.ethereum.on('chainChanged', (_chainId) => {
+            console.log('Network changed. Reloading the page...');
+            window.location.reload();
+        });
+
+        window.ethereum.on('accountsChanged', (accounts) => {
+            console.log('Account changed or disconnected. Reloading the page...');
             window.location.reload();
         });
     }
 
+    // --- تابع اصلی برای شروع کار ---
     async function initialize() {
         await loadArtifacts();
         const storedDeployments = getStoredDeployments();
