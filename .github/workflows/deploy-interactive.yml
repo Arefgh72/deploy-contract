@@ -21,7 +21,6 @@ jobs:
       - name: Install Python and Solidity dependencies
         run: |
           pip install -r requirements.txt
-          # برای پیدا کردن کدهای openzeppelin، باید آن را با npm نصب کنیم
           npm install @openzeppelin/contracts
 
       - name: Build project artifacts
@@ -29,20 +28,18 @@ jobs:
 
       - name: Prepare Ethers.js for Deployment
         run: |
-           mkdir -p lib
-           curl -L https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js -o lib/ethers.umd.min.js
+          mkdir -p lib
+          curl -L https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js -o lib/ethers.umd.min.js
 
       - name: Organize files for deployment
         run: |
-          mkdir public
+          mkdir -p public
           cp index.html ./public/
           cp deploy-ui.js ./public/
           cp artifacts.json ./public/
-          # پوشه‌های لازم برای فرانت‌اند
+          cp verification_*.json ./public/  # <-- این خط کلیدی است
           cp -r contracts ./public/
           cp -r lib ./public/
-          # پوشه openzeppelin برای قابلیت وریفای در آینده
-          cp -r node_modules/@openzeppelin ./public/
 
       - name: Deploy UI to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
