@@ -58,6 +58,7 @@ def build():
     print("\nBuild finished successfully!")
 
 if __name__ == "__main__":
-    # اطمینان از نصب بودن پیش‌نیازها
+    # اطمینان از نصب بودن پیش‌نیازهای npm
+    print("-> Installing Node.js dependencies...")
     subprocess.run("npm install @openzeppelin/contracts sol-merger", shell=True, check=True)
     build()
