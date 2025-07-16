@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: '' # کش کردن وابستگی‌ها برای اجرای سریع‌تر در آینده
+          cache: '' # کش غیرفعال است
 
       # مرحله ۳: وابستگی‌ها را نصب و قراردادها را کامپایل می‌کند
       - name: Install dependencies and Compile Contracts
@@ -30,14 +30,17 @@ jobs:
           npm install
           npm run compile
 
-      # مرحله ۴: فایل‌های نهایی را به شاخه deploy-contract پوش می‌کند
+      # مرحله ۴: فایل ethers.js را برای انتشار آماده می‌کند
+      - name: Prepare Ethers.js for Deployment
+        run: |
+          mkdir -p ./lib
+          cp ./node_modules/ethers/dist/ethers.umd.min.js ./lib/
+
+      # مرحله ۵: فایل‌های نهایی را به شاخه deploy-contract پوش می‌کند
       - name: Deploy UI to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          # شاخه‌ای که سایت در آن منتشر می‌شود (می‌توانید تغییر دهید)
           publish_branch: deploy-contract
-          # مسیری که فایل‌های سایت در آن قرار دارند (نقطه یعنی ریشه پروژه)
           publish_dir: .
-          # با این گزینه، تاریخچه کامیت‌های شاخه دیپلوی تمیز می‌ماند
           force_orphan: true
