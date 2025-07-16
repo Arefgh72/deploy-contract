@@ -4,42 +4,6 @@ import subprocess
 from pathlib import Path
 from solcx import compile_files, install_solc, set_solc_version
 
-# این دقیقاً تابع شماست، بدون هیچ تغییری
-def generate_standard_json_input(contract_path, source_code):
-    """
-    یک فایل با فرمت Standard-JSON-Input برای وریفای کردن قرارداد در اکسپلوررها تولید می‌کند.
-    """
-    return {
-        "language": "Solidity",
-        "sources": {
-            contract_path: {
-                "content": source_code
-            }
-        },
-        "settings": {
-            "optimizer": {
-                "enabled": False,
-                "runs": 200
-            },
-            "outputSelection": {
-                "*": {
-                    "*": [
-                        "abi",
-                        "evm.bytecode",
-                        "evm.deployedBytecode",
-                        "evm.methodIdentifiers",
-                        "metadata"
-                    ]
-                }
-            },
-            "metadata": {
-                "useLiteralContent": True
-            },
-            "libraries": {}
-        }
-    }
-
-
 def build():
     # ۱. لیست قراردادها
     contract_folder = Path("contracts")
@@ -54,10 +18,6 @@ def build():
 
     # ۳. کامپایل برای artifacts.json
     print("\nCompiling contracts for ABI and Bytecode...")
-    if not os.path.exists("node_modules/@openzeppelin"):
-        print("-> OpenZeppelin not found, running 'npm install'...")
-        subprocess.run("npm install @openzeppelin/contracts", shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    
     compiled_sol = compile_files(
         main_contract_paths, output_values=["abi", "bin"], 
         import_remappings={"@openzeppelin/": "node_modules/@openzeppelin/"}
@@ -69,27 +29,28 @@ def build():
     with open('artifacts.json', 'w') as f: json.dump(artifacts, f, indent=2)
     print("✅ artifacts.json created successfully!")
 
-    # ۴. ساخت فایل‌های وریفای با استفاده از تابع شما
+    # ۴. ساخت فایل‌های وریفای با ابزار استاندارد sol-merger
     print("\nGenerating verification files...")
-    print("-> Installing sol-merger to flatten contracts...")
-    subprocess.run("npm install sol-merger", shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    
     for contract_file_path in main_contract_paths:
         try:
-            print(f"  -> Flattening {contract_file_path} to feed your function...")
-            # اجرای sol-merger برای به دست آوردن کد کامل
+            print(f"  -> Flattening {contract_file_path}...")
+            # اجرای sol-merger از طریق خط فرمان برای فلت کردن
             result = subprocess.run(
                 f"npx sol-merger \"{contract_file_path}\"",
                 shell=True, check=True, capture_output=True, text=True
             )
             flattened_code = result.stdout
             
-            # فراخوانی تابع شما با کد کامل
-            std_json = generate_standard_json_input(contract_file_path.name, flattened_code)
+            # ساخت فایل JSON برای وریفای
+            verification_input = {
+                "language": "Solidity",
+                "sources": { contract_file_path.name: { "content": flattened_code } },
+                "settings": { "optimizer": { "enabled": False, "runs": 200 }, "outputSelection": { "*": { "*": ["*"] } } }
+            }
             
             output_filename = f"verification_{contract_file_path.stem}.json"
-            with open(output_filename, 'w') as f: json.dump(std_json, f, indent=2)
-            print(f"  -> Created {output_filename} using your function.")
+            with open(output_filename, 'w') as f: json.dump(verification_input, f, indent=2)
+            print(f"  -> Created {output_filename}")
 
         except Exception as e:
             print(f"  -> Error processing {contract_file_path}: {e}")
@@ -97,4 +58,6 @@ def build():
     print("\nBuild finished successfully!")
 
 if __name__ == "__main__":
+    # اطمینان از نصب بودن پیش‌نیازها
+    subprocess.run("npm install @openzeppelin/contracts sol-merger", shell=True, check=True)
     build()
