@@ -4,16 +4,12 @@ const solc = require('solc');
 
 // لیست قراردادهای اصلی شما
 const mainContractFiles = [
-    "YazdParadiseNFT.sol",
-    "ParsToken.sol",
-    "MainContract.sol",
-    "InteractFeeProxy.sol",
-    "GenericNFT.sol",
-    "GenericToken.sol",
-    "SimpleContract.sol"
+    "YazdParadiseNFT.sol", "ParsToken.sol", "MainContract.sol", "InteractFeeProxy.sol",
+    "GenericNFT.sol", "GenericToken.sol", "SimpleContract.sol"
 ];
 
 function findImports(importPath) {
+    // این تابع به کامپایلر کمک می‌کند تا فایل‌های import شده را پیدا کند
     try {
         // ابتدا تلاش برای پیدا کردن در node_modules
         const fullPath = require.resolve(importPath, { paths: [path.resolve(__dirname, 'node_modules')] });
@@ -24,16 +20,25 @@ function findImports(importPath) {
             const fullPath = require.resolve(importPath, { paths: [path.resolve(__dirname, 'contracts')] });
             return { contents: fs.readFileSync(fullPath, 'utf8') };
         } catch (e2) {
-            return { error: `File not found: ${importPath}` };
+            // و در نهایت مسیرهای نسبی
+             try {
+                const fullPath = path.resolve(__dirname, importPath);
+                return { contents: fs.readFileSync(fullPath, 'utf8') };
+            } catch (e3) {
+                 return { error: `File not found: ${importPath}` };
+            }
         }
     }
 }
 
+// 1. ساخت فایل artifacts.json برای رابط کاربری
 function compileForArtifacts() {
     const input = {
         language: 'Solidity',
         sources: {},
-        settings: { outputSelection: { '*': { '*': ['abi', 'evm.bytecode'] } } }
+        settings: {
+            outputSelection: { '*': { '*': ['abi', 'evm.bytecode'] } }
+        }
     };
     mainContractFiles.forEach(fileName => {
         input.sources[fileName] = { content: fs.readFileSync(path.resolve(__dirname, 'contracts', fileName), 'utf8') };
@@ -45,8 +50,7 @@ function compileForArtifacts() {
         let hasError = false;
         output.errors.forEach(err => {
             if (err.severity === 'error') {
-                console.error(err.formattedMessage);
-                hasError = true;
+                console.error(err.formattedMessage); hasError = true;
             }
         });
         if (hasError) process.exit(1);
@@ -65,55 +69,23 @@ function compileForArtifacts() {
     console.log('✅ artifacts.json created successfully!');
 }
 
+// 2. ساخت فایل‌های JSON کامل برای وریفای کردن
 function generateVerificationFiles() {
     console.log('\nGenerating verification files...');
+    const remappings = [`@openzeppelin/=${path.resolve(__dirname, 'node_modules/@openzeppelin/')}`];
+    
     mainContractFiles.forEach(mainFile => {
-        const mainFilePath = `contracts/${mainFile}`;
-        const sources = {};
-        const filesToProcess = [mainFilePath];
-        const processedFiles = new Set();
-
-        while (filesToProcess.length > 0) {
-            let currentPath = filesToProcess.pop();
-            if (processedFiles.has(currentPath)) continue;
-
-            let absolutePath;
-            try {
-                if (currentPath.startsWith('.')) {
-                    absolutePath = path.resolve(currentPath);
-                } else {
-                    absolutePath = require.resolve(currentPath, {
-                        paths: [path.resolve(__dirname, 'contracts'), path.resolve(__dirname, 'node_modules')]
-                    });
-                }
-            } catch (e) {
-                console.warn(`Warning: Could not resolve ${currentPath}`);
-                continue;
-            }
-            
-            processedFiles.add(currentPath);
-            const sourceCode = fs.readFileSync(absolutePath, 'utf8');
-            sources[currentPath] = { content: sourceCode };
-
-            const importRegex = /import\s+"([^"]+)";/g;
-            let match;
-            while ((match = importRegex.exec(sourceCode)) !== null) {
-                let importPath = match[1];
-                let resolvedPath = importPath;
-                if (importPath.startsWith('./') || importPath.startsWith('../')) {
-                    resolvedPath = path.join(path.dirname(currentPath), importPath);
-                    // نرمال‌سازی مسیر برای حذف '..' و '.'
-                    resolvedPath = path.normalize(resolvedPath);
-                }
-                if (!processedFiles.has(resolvedPath)) {
-                    filesToProcess.push(resolvedPath);
-                }
-            }
-        }
-
+        const filePath = path.join('contracts', mainFile);
+        // استفاده از sol-merger برای فلت کردن کد
+        const flattenedCode = require('sol-merger').flatten(filePath, { remappings });
+        
         const verificationInput = {
             language: 'Solidity',
-            sources: sources,
+            sources: {
+                [mainFile]: {
+                    content: flattenedCode
+                }
+            },
             settings: {
                 optimizer: { enabled: false, runs: 200 },
                 outputSelection: { "*": { "*": ["*"] } }
@@ -127,5 +99,21 @@ function generateVerificationFiles() {
     });
 }
 
+
+// قبل از اجرای توابع، پکیج sol-merger را به package.json اضافه می‌کنیم
+function setup() {
+    console.log('Adding sol-merger dependency...');
+    const packageJsonPath = path.resolve(__dirname, 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    if (!packageJson.dependencies['sol-merger']) {
+        packageJson.dependencies['sol-merger'] = '^4.1.0';
+        fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
+        console.log('-> sol-merger added. Please run "npm install" again.');
+        // چون در محیط اکشن هستیم، مستقیم نصب می‌کنیم
+        require('child_process').execSync('npm install sol-merger', { stdio: 'inherit' });
+    }
+}
+
+setup();
 compileForArtifacts();
 generateVerificationFiles();
