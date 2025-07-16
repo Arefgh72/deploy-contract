@@ -2,19 +2,16 @@ import os
 import json
 from pathlib import Path
 from solcx import compile_files, install_solc, set_solc_version
+from pysol_flatten import flatten
 
 def build():
     # ۱. لیست قراردادها
     contract_folder = Path("contracts")
     main_contract_files = [
-        contract_folder / "YazdParadiseNFT.sol",
-        contract_folder / "ParsToken.sol",
-        contract_folder / "MainContract.sol",
-        contract_folder / "InteractFeeProxy.sol",
-        contract_folder / "GenericNFT.sol",
-        contract_folder / "GenericToken.sol",
-        contract_folder / "SimpleContract.sol",
+        "YazdParadiseNFT.sol", "ParsToken.sol", "MainContract.sol", "InteractFeeProxy.sol",
+        "GenericNFT.sol", "GenericToken.sol", "SimpleContract.sol"
     ]
+    main_contract_paths = [contract_folder / f for f in main_contract_files]
 
     # ۲. نصب و تنظیم کامپایلر سالیدیتی
     print("Setting up solc...")
@@ -25,7 +22,7 @@ def build():
     # ۳. کامپایل قراردادها برای artifacts.json
     print("\nCompiling contracts for ABI and Bytecode...")
     compiled_sol = compile_files(
-        main_contract_files,
+        main_contract_paths,
         output_values=["abi", "bin"],
         import_remappings={"@openzeppelin/": "node_modules/@openzeppelin/"},
         solc_version=solc_version
@@ -45,13 +42,36 @@ def build():
 
     # ۴. ساخت فایل‌های وریفای کامل (فلت شده)
     print("\nGenerating verification files...")
-    # متاسفانه، کتابخانه پایتون مستقیمی برای فلت کردن وجود ندارد.
-    # ساده‌ترین راه حل این است که از همان روش قبلی (ساخت JSON جامع در جاوا اسکریپت) استفاده کنیم
-    # یا اینکه در ورک‌فلو از ابزار خط فرمان استفاده کنیم.
-    # برای سادگی، فعلا این بخش را غیرفعال نگه می‌داریم تا پروژه دوباره کار کند.
-    # بعدا می‌توانیم این قابلیت را با یک روش مطمئن اضافه کنیم.
-    print("-> Verification file generation is skipped in this Python version for simplicity.")
+    for contract_file in main_contract_paths:
+        try:
+            print(f"  -> Flattening {contract_file}...")
+            flattened_code = flatten(str(contract_file), "node_modules")
+            
+            contract_name_for_json = contract_file.name
+            
+            verification_input = {
+                "language": "Solidity",
+                "sources": {
+                    contract_name_for_json: {
+                        "content": flattened_code
+                    }
+                },
+                "settings": {
+                    "optimizer": { "enabled": False, "runs": 200 },
+                    "outputSelection": { "*": { "*": ["*"] } }
+                }
+            }
+            
+            output_filename = f"verification_{contract_file.stem}.json"
+            with open(output_filename, 'w') as f:
+                json.dump(verification_input, f, indent=2)
+            print(f"  -> Created {output_filename}")
+
+        except Exception as e:
+            print(f"  -> Error processing {contract_file}: {e}")
+
     print("\nBuild finished successfully!")
+
 
 if __name__ == "__main__":
     build()
