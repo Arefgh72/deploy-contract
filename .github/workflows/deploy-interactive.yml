@@ -26,14 +26,16 @@ jobs:
       - name: Install Dependencies and Build
         run: |
           pip install -r requirements.txt
+          # این دستور تمام فایل‌های لازم مانند artifacts.json و verification_*.json را می‌سازد
           python build.py
 
-      # این مرحله کلیدی که در نسخه قبلی جا افتاده بود، دوباره اضافه شده است
+      # --- این مرحله کلیدی در نسخه‌های اخیر من جا افتاده بود ---
       - name: Prepare Ethers.js for Deployment
         run: |
           mkdir -p lib
           curl -L https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js -o lib/ethers.umd.min.js
 
+      # این مرحله تمام فایل‌های لازم را برای انتشار آماده می‌کند
       - name: Organize files for deployment
         run: |
           mkdir public
@@ -41,7 +43,6 @@ jobs:
           cp deploy-ui.js ./public/
           cp artifacts.json ./public/
           cp verification_*.json ./public/
-          # این خط هم برای کپی کردن پوشه lib اضافه شده است
           cp -r lib ./public/
 
       - name: Deploy UI to GitHub Pages
