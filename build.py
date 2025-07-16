@@ -3,64 +3,57 @@ import json
 import re
 from pathlib import Path
 from solcx import compile_files, install_solc, set_solc_version
+import subprocess
 
-# --- تابع جدید و قدرتمند برای فلت کردن کد ---
-def flatten_code(main_file_path):
-    print(f"  -> Flattening {main_file_path}...")
+# تابع برای پیدا کردن مسیر مطلق یک فایل import شده
+def resolve_import_path(importing_file_path, import_path_str):
+    if import_path_str.startswith('@openzeppelin'):
+        return Path('node_modules') / import_path_str
+    else:
+        return Path(importing_file_path).parent / import_path_str
+
+# تابع اصلی برای فلت کردن کد به صورت بازگشتی
+def flatten_contract(main_file_path):
     processed_files = set()
-    output_code = []
+    ordered_content = []
 
-    def find_and_process(file_path_str):
-        # جلوگیری از پردازش تکراری و حلقه‌های بی‌نهایت
-        if file_path_str in processed_files:
+    def process_file(file_path):
+        # جلوگیری از پردازش تکراری
+        abs_path_str = str(file_path.resolve())
+        if abs_path_str in processed_files:
             return
-        processed_files.add(file_path_str)
+        processed_files.add(abs_path_str)
 
-        # پیدا کردن مسیر مطلق فایل
         try:
-            # ابتدا در پوشه فعلی یا node_modules جستجو کن
-            absolute_path = require_resolve_py(file_path_str)
-        except Exception:
-            print(f"    - Warning: Could not find import '{file_path_str}'. Skipping.")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                code = f.read()
+        except FileNotFoundError:
+            print(f"    - Warning: Could not find file {file_path}. Skipping.")
             return
 
-        with open(absolute_path, 'r', encoding='utf-8') as f:
-            code = f.read()
-
-        # پیدا کردن تمام import ها در این فایل
+        # پیدا کردن و پردازش تمام import ها در این فایل (عمق اول)
         import_regex = r'import\s+"([^"]+)";'
         imports = re.findall(import_regex, code)
-
-        # ابتدا تمام وابستگی‌های این فایل را پردازش کن (عمق اول)
         for import_path in imports:
-            # ساخت مسیر درست برای فایل import شده
-            resolved_import_path = str(Path(path.dirname(absolute_path)) / import_path)
-            find_and_process(resolved_import_path)
+            resolved_path = resolve_import_path(file_path, import_path)
+            process_file(resolved_path)
         
-        # حذف pragma و license از خطوط
+        # حذف pragma, license و import ها و اضافه کردن به خروجی
+        cleaned_lines = []
         for line in code.splitlines():
-            if not (line.strip().startswith('pragma solidity') or line.strip().startswith('// SPDX-License-Identifier:') or line.strip().startswith('import ')):
-                output_code.append(line)
+            if not (line.strip().startswith(('pragma solidity', '// SPDX-License-Identifier:', 'import ' ))):
+                cleaned_lines.append(line)
+        
+        if cleaned_lines:
+            ordered_content.append(f"// --- From {file_path} ---\n" + "\n".join(cleaned_lines))
 
-    # تابع کمکی برای پیدا کردن مسیر فایل‌ها در پایتون
-    def require_resolve_py(p):
-        p = Path(p)
-        if p.is_absolute():
-            return str(p)
-        # برای @openzeppelin
-        if str(p).startswith('@openzeppelin'):
-            return str(Path('node_modules') / p)
-        # برای مسیرهای نسبی
-        return str(p)
+    process_file(main_file_path)
     
-    # اجرای فرآیند فلت کردن
-    find_and_process(str(main_file_path))
-
     # اضافه کردن هدرهای لازم به ابتدای فایل نهایی
-    final_code = "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\n" + "\n".join(output_code)
-    return final_code
+    header = "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\n"
+    return header + "\n\n".join(ordered_content)
 
-# --- بدنه اصلی اسکریپت ---
+
 def build():
     # ۱. لیست قراردادها
     contract_folder = Path("contracts")
@@ -75,11 +68,10 @@ def build():
 
     # ۳. کامپایل برای artifacts.json
     print("\nCompiling contracts for ABI and Bytecode...")
-    # اطمینان از وجود node_modules برای py-solc-x
-    if not os.path.exists("node_modules"):
+    if not os.path.exists("node_modules/@openzeppelin"):
         print("-> OpenZeppelin not found, running 'npm install'...")
         subprocess.run("npm install @openzeppelin/contracts", shell=True, check=True)
-
+        
     compiled_sol = compile_files(
         main_contract_paths, output_values=["abi", "bin"], 
         import_remappings={"@openzeppelin/": "node_modules/@openzeppelin/"}
@@ -91,11 +83,12 @@ def build():
     with open('artifacts.json', 'w') as f: json.dump(artifacts, f, indent=2)
     print("✅ artifacts.json created successfully!")
 
-    # ۴. ساخت فایل‌های وریفای با منطق داخلی
+    # ۴. ساخت فایل‌های وریفای با فلت کردن
     print("\nGenerating verification files...")
     for contract_file_path in main_contract_paths:
         try:
-            flattened_code = flatten_code(contract_file_path)
+            print(f"  -> Flattening {contract_file_path}...")
+            flattened_code = flatten_contract(contract_file_path)
             
             verification_input = {
                 "language": "Solidity",
@@ -115,6 +108,4 @@ def build():
     print("\nBuild finished successfully!")
 
 if __name__ == "__main__":
-    import subprocess
-    from os import path
     build()
