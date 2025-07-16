@@ -1,4 +1,58 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // ... (تمام متغیرهای UI مثل قبل)
+    // ... (توابع کمکی اولیه مثل getStoredDeployments, saveDeployments, log, clearLogs, showView, connectWallet, executeDeploy)
+
+    function downloadFile(url, filename) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    function displayVerificationLinks(deployedContracts) {
+        const downloadLinksDiv = document.getElementById('download-links');
+        const verificationSection = document.getElementById('verification-section');
+        downloadLinksDiv.innerHTML = ''; 
+        if (deployedContracts.length === 0) {
+            verificationSection.classList.add('hidden');
+            return;
+        }
+
+        deployedContracts.forEach(({ contractClass, contractAddress, displayName, type }, index) => {
+            const itemContainer = document.createElement('div');
+            itemContainer.classList.add('verification-item');
+            const button = document.createElement('button');
+            
+            const verificationJsonFile = `verification_${contractClass}.json`;
+            const downloadFilename = `${displayName.replace(/\s+/g, '-')}_${type}_${index + 1}_(${contractAddress}).json`;
+
+            button.innerText = `دانلود فایل وریفای برای: ${displayName} (${type})`;
+            
+            button.onclick = () => {
+                log(`\nدر حال دانلود فایل ${verificationJsonFile}...`);
+                downloadFile(`./${verificationJsonFile}`, downloadFilename);
+            };
+
+            const infoParagraph = document.createElement('p');
+            infoParagraph.classList.add('verification-item-info');
+            infoParagraph.innerHTML = `آدرس: ${contractAddress}<br>نام قرارداد (برای وریفای): <strong>${contractClass}</strong>`;
+            
+            itemContainer.appendChild(button);
+            itemContainer.appendChild(infoParagraph);
+            downloadLinksDiv.appendChild(itemContainer);
+        });
+
+        verificationSection.classList.remove('hidden');
+    }
+    
+    // ... (تمام Event Listener ها دقیقاً مثل قبل هستند، فقط بخش مربوط به 'path' از آبجکت newDeployment حذف می‌شود)
+});
+
+// برای جلوگیری از هرگونه ابهام، کد کامل این فایل:
+/* PASTE FULL deploy-ui.js code here, with simplified displayVerificationLinks and no complex fetch logic */
+document.addEventListener('DOMContentLoaded', () => {
     // تعریف متغیرهای UI
     const views = {
         menu: document.getElementById('main-menu'),
@@ -16,18 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let artifacts = {};
     let signer = null;
     let listenersAttached = false;
-
-    // --- این بخش کلیدی در نسخه قبل حذف شده بود ---
-    const path = {
-        dirname: (p) => p.substring(0, p.lastIndexOf('/')),
-        join: (...args) => args.map((part, i) => {
-            if (i === 0) return part.trim().replace(/\/+$/, '');
-            return part.trim().replace(/^\/+|\/+$/, '');
-        }).filter(x => x.length).join('/'),
-        basename: (p) => p.substring(p.lastIndexOf('/') + 1)
-    };
-    // ---------------------------------------------
-
+    
     function getStoredDeployments() {
         const stored = sessionStorage.getItem('deployedContracts');
         return stored ? JSON.parse(stored) : [];
@@ -98,89 +141,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function fetchSourceWithImports(initialContractPath) {
-        const sources = {};
-        const filesToProcess = [{
-            key: initialContractPath,
-            fetchPath: initialContractPath
-        }];
-        const processedKeys = new Set();
-        while (filesToProcess.length > 0) {
-            const currentFile = filesToProcess.pop();
-            if (processedKeys.has(currentFile.key)) continue;
-            processedKeys.add(currentFile.key);
-            log(`   -> در حال واکشی ${currentFile.key}`);
-            const response = await fetch(`./${currentFile.fetchPath}`);
-            if (!response.ok) throw new Error(`فایل سورس ${currentFile.fetchPath} یافت نشد.`);
-            const sourceCode = await response.text();
-            sources[currentFile.key] = { content: sourceCode };
-            const importRegex = /import\s+"([^"]+)";/g;
-            let match;
-            while ((match = importRegex.exec(sourceCode)) !== null) {
-                const importKey = match[1];
-                if (processedKeys.has(importKey)) continue;
-                let fetchPath;
-                if (importKey.startsWith('@openzeppelin/')) {
-                    fetchPath = 'node_modules/' + importKey;
-                } else {
-                    const dir = path.dirname(currentFile.fetchPath);
-                    fetchPath = path.join(dir, importKey);
-                }
-                filesToProcess.push({ key: importKey, fetchPath: fetchPath });
-            }
-        }
-        log('   -> تمام فایل‌های وابسته با موفقیت واکشی شدند.');
-        return sources;
-    }
-
-    function generateStandardJsonInput(sources) {
-        return {
-            language: "Solidity",
-            sources: sources,
-            settings: {
-                optimizer: { enabled: false, runs: 200 },
-                outputSelection: { "*": { "*": [ "abi", "evm.bytecode" ] } }
-            }
-        };
-    }
-
-    function downloadJson(data, filename) {
-        const jsonString = JSON.stringify(data, null, 2);
-        const blob = new Blob([jsonString], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
+    function downloadFile(url, filename) {
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
     }
-
+    
     function displayVerificationLinks(deployedContracts) {
-        const downloadLinksDiv = document.getElementById('download-links');
-        const verificationSection = document.getElementById('verification-section');
         downloadLinksDiv.innerHTML = '';
         if (deployedContracts.length === 0) {
             verificationSection.classList.add('hidden');
             return;
         }
-        deployedContracts.forEach(({ contractClass, contractAddress, displayName, type, path: contractPath }, index) => {
+        deployedContracts.forEach(({ contractClass, contractAddress, displayName, type }, index) => {
             const itemContainer = document.createElement('div');
             itemContainer.classList.add('verification-item');
             const button = document.createElement('button');
-            const filename = `${displayName.replace(/\s+/g, '-')}_${type}_${index + 1}_(${contractAddress}).json`;
+            const verificationJsonFile = `verification_${contractClass}.json`;
+            const downloadFilename = `${displayName.replace(/\s+/g, '-')}_${type}_${index + 1}_(${contractAddress}).json`;
             button.innerText = `دانلود فایل وریفای برای: ${displayName} (${type})`;
-            button.onclick = async () => {
-                try {
-                    log(`\nدر حال آماده‌سازی فایل جامع برای ${displayName}...`);
-                    const allSources = await fetchSourceWithImports(contractPath);
-                    const standardJson = generateStandardJsonInput(allSources);
-                    downloadJson(standardJson, filename);
-                    log(`-> فایل ${filename} آماده دانلود است.`);
-                } catch (error) {
-                    log(`❌ خطا در ساخت فایل: ${error.message}`);
-                }
+            button.onclick = () => {
+                log(`\nدر حال دانلود فایل ${verificationJsonFile}...`);
+                downloadFile(`./${verificationJsonFile}`, downloadFilename);
             };
             const infoParagraph = document.createElement('p');
             infoParagraph.classList.add('verification-item-info');
@@ -220,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const deployerAddress = await signer.getAddress();
         const contract = await executeDeploy('GenericNFT', [name, symbol, deployerAddress], e.target);
         if (contract) {
-            const newDeployment = { contractClass: 'GenericNFT', contractAddress: contract.address, displayName: name, type: 'NFT', path: 'contracts/GenericNFT.sol' };
+            const newDeployment = { contractClass: 'GenericNFT', contractAddress: contract.address, displayName: name, type: 'NFT' };
             const allDeployments = getStoredDeployments();
             allDeployments.push(newDeployment);
             saveDeployments(allDeployments);
@@ -237,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const deployerAddress = await signer.getAddress();
         const contract = await executeDeploy('GenericToken', [name, symbol, deployerAddress], e.target);
         if (contract) {
-            const newDeployment = { contractClass: 'GenericToken', contractAddress: contract.address, displayName: name, type: 'Token', path: 'contracts/GenericToken.sol' };
+            const newDeployment = { contractClass: 'GenericToken', contractAddress: contract.address, displayName: name, type: 'Token' };
             const allDeployments = getStoredDeployments();
             allDeployments.push(newDeployment);
             saveDeployments(allDeployments);
@@ -251,7 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const deployerAddress = await signer.getAddress();
         const contract = await executeDeploy('SimpleContract', [deployerAddress], e.target);
         if (contract) {
-            const newDeployment = { contractClass: 'SimpleContract', contractAddress: contract.address, displayName: 'Simple-Contract', type: 'Contract', path: 'contracts/SimpleContract.sol' };
+            const newDeployment = { contractClass: 'SimpleContract', contractAddress: contract.address, displayName: 'Simple-Contract', type: 'Contract' };
             const allDeployments = getStoredDeployments();
             allDeployments.push(newDeployment);
             saveDeployments(allDeployments);
@@ -289,10 +274,10 @@ document.addEventListener('DOMContentLoaded', () => {
             log(`-> InteractFeeProxy در آدرس ${proxyContract.address} دیپلوی شد.`);
             log('\n✅ مجموعه با موفقیت دیپلوی شد.');
             const newDeployments = [
-                { contractClass: 'YazdParadiseNFT', contractAddress: deployedContracts['YazdParadiseNFT'].address, displayName: 'YazdParadiseNFT', type: 'Protocol-NFT', path: 'contracts/YazdParadiseNFT.sol' },
-                { contractClass: 'ParsToken', contractAddress: deployedContracts['ParsToken'].address, displayName: 'ParsToken', type: 'Protocol-Token', path: 'contracts/ParsToken.sol' },
-                { contractClass: 'MainContract', contractAddress: mainContract.address, displayName: 'MainContract', type: 'Protocol-Main', path: 'contracts/MainContract.sol' },
-                { contractClass: 'InteractFeeProxy', contractAddress: proxyContract.address, displayName: 'InteractFeeProxy', type: 'Protocol-Proxy', path: 'contracts/InteractFeeProxy.sol' }
+                { contractClass: 'YazdParadiseNFT', contractAddress: deployedContracts['YazdParadiseNFT'].address, displayName: 'YazdParadiseNFT', type: 'Protocol-NFT' },
+                { contractClass: 'ParsToken', contractAddress: deployedContracts['ParsToken'].address, displayName: 'ParsToken', type: 'Protocol-Token' },
+                { contractClass: 'MainContract', contractAddress: mainContract.address, displayName: 'MainContract', type: 'Protocol-Main' },
+                { contractClass: 'InteractFeeProxy', contractAddress: proxyContract.address, displayName: 'InteractFeeProxy', type: 'Protocol-Proxy' }
             ];
             const allDeployments = getStoredDeployments();
             saveDeployments(allDeployments.concat(newDeployments));
