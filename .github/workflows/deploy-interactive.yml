@@ -30,22 +30,21 @@ jobs:
           mkdir -p ./lib
           cp ./node_modules/ethers/dist/ethers.umd.min.js ./lib/
 
-      # --- این مرحله جدید است ---
       - name: Organize files for deployment
         run: |
-          mkdir public
+          mkdir -p public/node_modules
           cp index.html ./public/
           cp deploy-ui.js ./public/
           cp artifacts.json ./public/
           cp -r contracts ./public/
           cp -r lib ./public/
+          # --- این خط جدید و کلیدی است ---
+          cp -r node_modules/@openzeppelin ./public/node_modules/
 
-      # --- این مرحله ویرایش شده است ---
       - name: Deploy UI to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: deploy-contract
-          # فقط پوشه public را منتشر کن
           publish_dir: ./public
           force_orphan: true
