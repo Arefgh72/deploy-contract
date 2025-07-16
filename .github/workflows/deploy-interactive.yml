@@ -9,7 +9,6 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,22 +24,13 @@ jobs:
           npm install
           node compile.js
 
-      - name: Prepare Ethers.js for Deployment
-        run: |
-          mkdir -p ./lib
-          cp ./node_modules/ethers/dist/ethers.umd.min.js ./lib/
-
-      # این مرحله کلیدی، حالا تمام فایل‌های لازم را کپی می‌کند
       - name: Organize files for deployment
         run: |
-          mkdir -p public/node_modules
+          mkdir public
           cp index.html ./public/
           cp deploy-ui.js ./public/
           cp artifacts.json ./public/
-          cp verification_*.json ./public/
-          cp -r contracts ./public/
-          cp -r lib ./public/
-          cp -r node_modules/@openzeppelin ./public/node_modules/
+          cp verification_*.json ./public/ # <-- این خط مهم است
 
       - name: Deploy UI to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
