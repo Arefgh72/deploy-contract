@@ -1,58 +1,43 @@
 import os
 import json
-import re
+import subprocess
 from pathlib import Path
 from solcx import compile_files, install_solc, set_solc_version
-import subprocess
 
-def flatten_contract(main_file_path_str):
-    print(f"  -> Flattening {main_file_path_str}...")
-    processed_files = set()
-    ordered_content = []
-    base_dir = Path.cwd()
-
-    # تابع بازگشتی برای پردازش فایل‌ها و وابستگی‌هایشان
-    def process_file(file_path_obj):
-        # جلوگیری از پردازش تکراری
-        abs_path_str = str(file_path_obj.resolve())
-        if abs_path_str in processed_files:
-            return
-        processed_files.add(abs_path_str)
-
-        try:
-            with open(file_path_obj, 'r', encoding='utf-8') as f:
-                code = f.read()
-        except FileNotFoundError:
-            print(f"    - Warning: Could not find file {file_path_obj}. Skipping.")
-            return
-
-        # پیدا کردن تمام import ها در این فایل (عمق اول)
-        import_regex = r'import\s+"([^"]+)";'
-        imports = re.findall(import_regex, code)
-        
-        # ابتدا تمام وابستگی‌های این فایل را به صورت بازگشتی پردازش کن
-        for import_path_str in imports:
-            # ساخت مسیر درست برای فایل import شده
-            resolved_path = (file_path_obj.parent / import_path_str).resolve()
-            process_file(resolved_path)
-        
-        # حذف pragma, license و import ها و اضافه کردن به خروجی
-        cleaned_lines = []
-        for line in code.splitlines():
-            if not (line.strip().startswith(('pragma solidity', '// SPDX-License-Identifier:', 'import ' ))):
-                cleaned_lines.append(line)
-        
-        if cleaned_lines:
-            # اضافه کردن کامنت برای مشخص شدن منبع کد
-            relative_path_for_comment = file_path_obj.relative_to(base_dir) if file_path_obj.is_relative_to(base_dir) else file_path_obj
-            ordered_content.append(f"// From: {str(relative_path_for_comment).replace(os.sep, '/')}\n" + "\n".join(cleaned_lines))
-
-    # اجرای فرآیند فلت کردن
-    process_file(Path(main_file_path_str))
-    
-    # اضافه کردن هدرهای لازم به ابتدای فایل نهایی
-    header = "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\n"
-    return header + "\n\n".join(ordered_content)
+# این دقیقاً تابع شماست، بدون هیچ تغییری
+def generate_standard_json_input(contract_path, source_code):
+    """
+    یک فایل با فرمت Standard-JSON-Input برای وریفای کردن قرارداد در اکسپلوررها تولید می‌کند.
+    """
+    return {
+        "language": "Solidity",
+        "sources": {
+            contract_path: {
+                "content": source_code
+            }
+        },
+        "settings": {
+            "optimizer": {
+                "enabled": False,
+                "runs": 200
+            },
+            "outputSelection": {
+                "*": {
+                    "*": [
+                        "abi",
+                        "evm.bytecode",
+                        "evm.deployedBytecode",
+                        "evm.methodIdentifiers",
+                        "metadata"
+                    ]
+                }
+            },
+            "metadata": {
+                "useLiteralContent": True
+            },
+            "libraries": {}
+        }
+    }
 
 
 def build():
@@ -72,7 +57,7 @@ def build():
     if not os.path.exists("node_modules/@openzeppelin"):
         print("-> OpenZeppelin not found, running 'npm install'...")
         subprocess.run("npm install @openzeppelin/contracts", shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
+    
     compiled_sol = compile_files(
         main_contract_paths, output_values=["abi", "bin"], 
         import_remappings={"@openzeppelin/": "node_modules/@openzeppelin/"}
@@ -84,21 +69,27 @@ def build():
     with open('artifacts.json', 'w') as f: json.dump(artifacts, f, indent=2)
     print("✅ artifacts.json created successfully!")
 
-    # ۴. ساخت فایل‌های وریفای با فلت کردن
+    # ۴. ساخت فایل‌های وریفای با استفاده از تابع شما
     print("\nGenerating verification files...")
+    print("-> Installing sol-merger to flatten contracts...")
+    subprocess.run("npm install sol-merger", shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
     for contract_file_path in main_contract_paths:
         try:
-            flattened_code = flatten_contract(contract_file_path)
+            print(f"  -> Flattening {contract_file_path} to feed your function...")
+            # اجرای sol-merger برای به دست آوردن کد کامل
+            result = subprocess.run(
+                f"npx sol-merger \"{contract_file_path}\"",
+                shell=True, check=True, capture_output=True, text=True
+            )
+            flattened_code = result.stdout
             
-            verification_input = {
-                "language": "Solidity",
-                "sources": { contract_file_path.name: { "content": flattened_code } },
-                "settings": { "optimizer": { "enabled": False, "runs": 200 }, "outputSelection": { "*": { "*": ["*"] } } }
-            }
+            # فراخوانی تابع شما با کد کامل
+            std_json = generate_standard_json_input(contract_file_path.name, flattened_code)
             
             output_filename = f"verification_{contract_file_path.stem}.json"
-            with open(output_filename, 'w') as f: json.dump(verification_input, f, indent=2)
-            print(f"  -> Created {output_filename}")
+            with open(output_filename, 'w') as f: json.dump(std_json, f, indent=2)
+            print(f"  -> Created {output_filename} using your function.")
 
         except Exception as e:
             print(f"  -> Error processing {contract_file_path}: {e}")
