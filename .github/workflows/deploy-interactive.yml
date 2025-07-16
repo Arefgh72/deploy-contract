@@ -1,0 +1,43 @@
+name: Deploy Interactive UI to GitHub Pages
+
+on:
+  # این ورک‌فلو به صورت دستی از طریق تب Actions قابل اجراست
+  workflow_dispatch:
+
+# سطح دسترسی لازم برای اینکه اکشن بتواند در ریپازیتوری شما یک شاخه جدید بسازد
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # مرحله ۱: کدهای ریپازیتوری را دانلود می‌کند
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # مرحله ۲: Node.js را برای اجرای اسکریپت‌ها آماده می‌کند
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm' # کش کردن وابستگی‌ها برای اجرای سریع‌تر در آینده
+
+      # مرحله ۳: وابستگی‌ها را نصب و قراردادها را کامپایل می‌کند
+      - name: Install dependencies and Compile Contracts
+        run: |
+          npm install
+          npm run compile
+
+      # مرحله ۴: فایل‌های نهایی را به شاخه deploy-contract پوش می‌کند
+      - name: Deploy UI to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # شاخه‌ای که سایت در آن منتشر می‌شود (می‌توانید تغییر دهید)
+          publish_branch: deploy-contract
+          # مسیری که فایل‌های سایت در آن قرار دارند (نقطه یعنی ریشه پروژه)
+          publish_dir: .
+          # با این گزینه، تاریخچه کامیت‌های شاخه دیپلوی تمیز می‌ماند
+          force_orphan: true
