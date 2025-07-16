@@ -9,7 +9,6 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,7 +22,7 @@ jobs:
       - name: Install dependencies and Compile Contracts
         run: |
           npm install
-          npm run compile
+          node compile.js # اسکریپت جدید را اجرا می‌کند
 
       - name: Prepare Ethers.js for Deployment
         run: |
@@ -32,15 +31,13 @@ jobs:
 
       - name: Organize files for deployment
         run: |
-          mkdir -p public/node_modules
+          mkdir public
           cp index.html ./public/
           cp deploy-ui.js ./public/
           cp artifacts.json ./public/
-          cp -r contracts ./public/
-          cp -r lib ./public/
-          # --- این خط جدید و کلیدی است ---
-          cp -r node_modules/@openzeppelin ./public/node_modules/
-
+          # --- این خط جدید است ---
+          cp verification_*.json ./public/
+          
       - name: Deploy UI to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
