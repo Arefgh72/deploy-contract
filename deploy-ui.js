@@ -50,9 +50,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('./artifacts.json');
             if (!response.ok) throw new Error("فایل artifacts.json یافت نشد.");
             artifacts = await response.json();
-            log("فایل‌های ABI و Bytecode با موفقیت بارگذاری شدند.");
+            log("فایل‌های ABI و Bytecode با موفقیت بارگذاری شدند. سیستم آماده است.");
+
+            document.getElementById('deploy-yazd').innerText = 'شروع استقرار';
+            document.getElementById('deploy-nft').innerText = 'استقرار NFT';
+            document.getElementById('deploy-token').innerText = 'استقرار توکن';
+            document.getElementById('deploy-simple').innerText = 'استقرار قرارداد ساده';
+            
+            document.querySelectorAll('.deploy-button').forEach(btn => {
+                btn.disabled = false;
+            });
+
         } catch (error) {
-            log(`خطا در بارگذاری آرتیفکت‌ها: ${error.message}`);
+            log(`❌ خطا در بارگذاری فایل‌های اولیه: ${error.message}. لطفاً صفحه را رفرش کنید.`);
         }
     }
 
@@ -166,7 +176,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return null;
         } finally {
             button.disabled = false;
-            button.innerText = 'استقرار';
         }
     }
 
@@ -228,37 +237,39 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (!await connectWallet()) throw new Error("اتصال به کیف پول لغو شد.");
             const deployerAddress = await signer.getAddress();
-            const contractsToDeploy = [
-                { name: 'YazdParadiseNFT', path: 'contracts/YazdParadiseNFT.sol', args: [deployerAddress] },
-                { name: 'ParsToken', path: 'contracts/ParsToken.sol', args: [deployerAddress] }
-            ];
-            const deployedAddresses = {};
-            for (const c of contractsToDeploy) {
-                log(`\nدیپلوی ${c.name}...`);
-                const factory = new ethers.ContractFactory(artifacts[c.name].abi, artifacts[c.name].bytecode, signer);
-                const contract = await factory.deploy(...c.args);
-                await contract.deployed();
-                log(`-> ${c.name} در آدرس ${contract.address} دیپلوی شد.`);
-                deployedAddresses[c.name] = contract.address;
-            }
-            const mainFactory = new ethers.ContractFactory(artifacts['MainContract'].abi, artifacts['MainContract'].bytecode, signer);
-            const mainContract = await mainFactory.deploy(deployedAddresses['YazdParadiseNFT'], deployedAddresses['ParsToken'], deployerAddress);
+            
+            const factoryNFT = new ethers.ContractFactory(artifacts['YazdParadiseNFT'].abi, artifacts['YazdParadiseNFT'].bytecode, signer);
+            const yazdParadiseNFT = await factoryNFT.deploy(deployerAddress);
+            await yazdParadiseNFT.deployed();
+            log(`-> YazdParadiseNFT در آدرس ${yazdParadiseNFT.address} دیپلوی شد.`);
+
+            const factoryToken = new ethers.ContractFactory(artifacts['ParsToken'].abi, artifacts['ParsToken'].bytecode, signer);
+            const parsToken = await factoryToken.deploy(deployerAddress);
+            await parsToken.deployed();
+            log(`-> ParsToken در آدرس ${parsToken.address} دیپلوی شد.`);
+
+            const factoryMain = new ethers.ContractFactory(artifacts['MainContract'].abi, artifacts['MainContract'].bytecode, signer);
+            const mainContract = await factoryMain.deploy(yazdParadiseNFT.address, parsToken.address, deployerAddress);
             await mainContract.deployed();
             log(`-> MainContract در آدرس ${mainContract.address} دیپلوی شد.`);
-            const proxyFactory = new ethers.ContractFactory(artifacts['InteractFeeProxy'].abi, artifacts['InteractFeeProxy'].bytecode, signer);
-            const proxyContract = await proxyFactory.deploy(mainContract.address);
+            
+            const factoryProxy = new ethers.ContractFactory(artifacts['InteractFeeProxy'].abi, artifacts['InteractFeeProxy'].bytecode, signer);
+            const proxyContract = await factoryProxy.deploy(mainContract.address);
             await proxyContract.deployed();
             log(`-> InteractFeeProxy در آدرس ${proxyContract.address} دیپلوی شد.`);
+
             log('\n✅ مجموعه با موفقیت دیپلوی شد.');
+
             const newDeployments = [
-                { contractClass: 'YazdParadiseNFT', contractAddress: deployedAddresses['YazdParadiseNFT'], displayName: 'YazdParadiseNFT', type: 'Protocol-NFT', path: 'contracts/YazdParadiseNFT.sol' },
-                { contractClass: 'ParsToken', contractAddress: deployedAddresses['ParsToken'], displayName: 'ParsToken', type: 'Protocol-Token', path: 'contracts/ParsToken.sol' },
+                { contractClass: 'YazdParadiseNFT', contractAddress: yazdParadiseNFT.address, displayName: 'YazdParadiseNFT', type: 'Protocol-NFT', path: 'contracts/YazdParadiseNFT.sol' },
+                { contractClass: 'ParsToken', contractAddress: parsToken.address, displayName: 'ParsToken', type: 'Protocol-Token', path: 'contracts/ParsToken.sol' },
                 { contractClass: 'MainContract', contractAddress: mainContract.address, displayName: 'MainContract', type: 'Protocol-Main', path: 'contracts/MainContract.sol' },
                 { contractClass: 'InteractFeeProxy', contractAddress: proxyContract.address, displayName: 'InteractFeeProxy', type: 'Protocol-Proxy', path: 'contracts/InteractFeeProxy.sol' }
             ];
             const allDeployments = getStoredDeployments();
             saveDeployments(allDeployments.concat(newDeployments));
             displayVerificationLinks(getStoredDeployments());
+
         } catch (error) {
             log(`\n❌ عملیات با خطا مواجه شد: ${error.message}`);
         } finally {
@@ -273,7 +284,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-show-simple').addEventListener('click', () => showView('simple'));
     document.getElementById('back-to-menu').addEventListener('click', () => showView(null));
 
-    // --- تابع اصلی برای شروع کار ---
     async function initialize() {
         await loadArtifacts();
         const storedDeployments = getStoredDeployments();
