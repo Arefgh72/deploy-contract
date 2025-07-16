@@ -18,30 +18,24 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Python and Solidity dependencies
+      - name: Install Dependencies and Build
         run: |
           pip install -r requirements.txt
-          npm install @openzeppelin/contracts
-
-      - name: Build project artifacts
-        run: python build.py
-
-      - name: Prepare Ethers.js for Deployment
-        run: |
-          mkdir -p lib
-          curl -L https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js -o lib/ethers.umd.min.js
+          python build.py
 
       - name: Organize files for deployment
         run: |
-          mkdir -p public
+          mkdir public
           cp index.html ./public/
           cp deploy-ui.js ./public/
           cp artifacts.json ./public/
-          cp -r contracts ./public/
-          cp -r lib ./public/
-          # --- این خط کلیدی در نسخه قبل جا افتاده بود ---
           cp verification_*.json ./public/
-
+          # برای اینکه فرانت‌اند بتواند سورس کدها را برای فلت کردن بخواند
+          # دیگر نیازی به کپی کردن این‌ها نیست چون build.py همه کار را انجام داده
+          # cp -r contracts ./public/
+          # cp -r lib ./public/
+          # cp -r node_modules/@openzeppelin ./public/
+          
       - name: Deploy UI to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
