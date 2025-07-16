@@ -13,26 +13,42 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          node-version: '20'
+          python-version: '3.10'
 
-      - name: Install dependencies and Compile Contracts
+      - name: Install Python and Solidity dependencies
         run: |
-          npm install
-          node compile.js
+          pip install -r requirements.txt
+          # برای پیدا کردن کدهای openzeppelin، باید آن را با npm نصب کنیم
+          npm install @openzeppelin/contracts
+
+      - name: Build project artifacts
+        run: python build.py
 
       - name: Prepare Ethers.js for Deployment
         run: |
+          # چون دیگر npm install کامل نداریم، این کتابخانه را مستقیم دانلود می‌کنیم
           mkdir -p lib
-          cp ./node_modules/ethers/dist/ethers.umd.min.js ./lib/
-      
-      # تمام فایل‌های ساخته شده حالا در ریشه پروژه هستند و منتشر می‌شوند
-      - name: Deploy All Files to GitHub Pages
+          curl -L https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js -o lib/ethers.umd.min.js
+
+      - name: Organize files for deployment
+        run: |
+          mkdir public
+          cp index.html ./public/
+          cp deploy-ui.js ./public/
+          cp artifacts.json ./public/
+          # پوشه‌های لازم برای فرانت‌اند
+          cp -r contracts ./public/
+          cp -r lib ./public/
+          # پوشه openzeppelin برای قابلیت وریفای در آینده
+          cp -r node_modules/@openzeppelin ./public/
+
+      - name: Deploy UI to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: deploy-contract
-          publish_dir: .
+          publish_dir: ./public
           force_orphan: true
