@@ -1,10 +1,8 @@
 name: Deploy Interactive UI to GitHub Pages
 
 on:
-  # این ورک‌فلو به صورت دستی از طریق تب Actions قابل اجراست
   workflow_dispatch:
 
-# سطح دسترسی لازم برای اینکه اکشن بتواند در ریپازیتوری شما یک شاخه جدید بسازد
 permissions:
   contents: write
 
@@ -13,34 +11,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # مرحله ۱: کدهای ریپازیتوری را دانلود می‌کند
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # مرحله ۲: Node.js را برای اجرای اسکریپت‌ها آماده می‌کند
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: '' # کش غیرفعال است
+          cache: ''
 
-      # مرحله ۳: وابستگی‌ها را نصب و قراردادها را کامپایل می‌کند
       - name: Install dependencies and Compile Contracts
         run: |
           npm install
           npm run compile
 
-      # مرحله ۴: فایل ethers.js را برای انتشار آماده می‌کند
       - name: Prepare Ethers.js for Deployment
         run: |
           mkdir -p ./lib
           cp ./node_modules/ethers/dist/ethers.umd.min.js ./lib/
 
-      # مرحله ۵: فایل‌های نهایی را به شاخه deploy-contract پوش می‌کند
+      # --- این مرحله جدید است ---
+      - name: Organize files for deployment
+        run: |
+          mkdir public
+          cp index.html ./public/
+          cp deploy-ui.js ./public/
+          cp artifacts.json ./public/
+          cp -r contracts ./public/
+          cp -r lib ./public/
+
+      # --- این مرحله ویرایش شده است ---
       - name: Deploy UI to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: deploy-contract
-          publish_dir: .
+          # فقط پوشه public را منتشر کن
+          publish_dir: ./public
           force_orphan: true
