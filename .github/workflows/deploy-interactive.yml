@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm' # کش کردن وابستگی‌ها برای اجرای سریع‌تر در آینده
+          cache: '' # کش کردن وابستگی‌ها برای اجرای سریع‌تر در آینده
 
       # مرحله ۳: وابستگی‌ها را نصب و قراردادها را کامپایل می‌کند
       - name: Install dependencies and Compile Contracts
