@@ -2,41 +2,43 @@ const fs = require('fs');
 const path = require('path');
 const solc = require('solc');
 
-// لیست قراردادهای اصلی شما
-const mainContractPaths = [
-    "contracts/YazdParadiseNFT.sol",
-    "contracts/ParsToken.sol",
-    "contracts/MainContract.sol",
-    "contracts/InteractFeeProxy.sol",
-    "contracts/GenericNFT.sol",
-    "contracts/GenericToken.sol",
-    "contracts/SimpleContract.sol"
+// لیست قراردادهای اصلی شما که برای هر کدام یک فایل وریفای ساخته می‌شود
+const mainContractFiles = [
+    "YazdParadiseNFT.sol",
+    "ParsToken.sol",
+    "MainContract.sol",
+    "InteractFeeProxy.sol",
+    "GenericNFT.sol",
+    "GenericToken.sol",
+    "SimpleContract.sol"
 ];
 
-// تابع برای پیدا کردن و خواندن فایل‌های import شده
-function findImports(relativePath) {
-    const ozPath = path.resolve(__dirname, 'node_modules', relativePath);
-    if (fs.existsSync(ozPath)) {
-        return { contents: fs.readFileSync(ozPath, 'utf8') };
-    }
-    // برای import های نسبی مانند ./Contract.sol
-    const localPath = path.resolve(__dirname, relativePath);
-     if (fs.existsSync(localPath)) {
-        return { contents: fs.readFileSync(localPath, 'utf8') };
-    }
-    return { error: 'File not found' };
-}
-
-// --- بخش اصلی کامپایل برای artifacts.json ---
+// --- بخش ۱: کامپایل برای artifacts.json (برای استفاده در UI) ---
 function compileForArtifacts() {
     const input = {
         language: 'Solidity',
         sources: {},
         settings: { outputSelection: { '*': { '*': ['abi', 'evm.bytecode'] } } }
     };
-    mainContractPaths.forEach(filePath => {
-        input.sources[path.basename(filePath)] = { content: fs.readFileSync(filePath, 'utf8') };
+
+    mainContractFiles.forEach(fileName => {
+        input.sources[fileName] = { content: fs.readFileSync(path.resolve(__dirname, 'contracts', fileName), 'utf8') };
     });
+
+    // تابع callback برای پیدا کردن import ها
+    const findImports = (importPath) => {
+        try {
+            const fullPath = require.resolve(importPath, { paths: [__dirname, path.resolve(__dirname, 'contracts')] });
+            return { contents: fs.readFileSync(fullPath, 'utf8') };
+        } catch (e) {
+            try {
+                 const fullPath = require.resolve(path.join('./node_modules/', importPath));
+                 return { contents: fs.readFileSync(fullPath, 'utf8') };
+            } catch (e2) {
+                 return { error: 'File not found' };
+            }
+        }
+    };
 
     const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports }));
 
@@ -64,41 +66,45 @@ function compileForArtifacts() {
     console.log('✅ artifacts.json created successfully!');
 }
 
-
-// --- بخش جدید برای ساخت فایل‌های وریفای ---
+// --- بخش ۲: ساخت فایل‌های وریفای کامل و جامع ---
 function generateVerificationFiles() {
     console.log('\nGenerating verification files...');
-    mainContractPaths.forEach(mainPath => {
+    mainContractFiles.forEach(mainFile => {
+        const mainFilePath = `contracts/${mainFile}`;
         const sources = {};
-        const filesToProcess = [mainPath];
+        const filesToProcess = [mainFilePath];
         const processedFiles = new Set();
 
         while (filesToProcess.length > 0) {
-            const currentPath = filesToProcess.pop();
+            let currentPath = filesToProcess.pop();
             if (processedFiles.has(currentPath)) continue;
-            
-            const absolutePath = path.resolve(__dirname, currentPath);
-            if (!fs.existsSync(absolutePath)) {
-                console.warn(`Warning: could not find file ${currentPath}`);
-                continue;
+
+            let absolutePath;
+            // تلاش برای پیدا کردن فایل در مسیرهای مختلف
+            if (currentPath.startsWith('@openzeppelin/')) {
+                 absolutePath = require.resolve(currentPath, { paths: [path.resolve(__dirname, 'node_modules')] });
+            } else {
+                 absolutePath = path.resolve(__dirname, currentPath);
             }
 
+            if (!fs.existsSync(absolutePath)) {
+                console.warn(`Warning: Could not find file ${currentPath}`);
+                continue;
+            }
+            
             processedFiles.add(currentPath);
             const sourceCode = fs.readFileSync(absolutePath, 'utf8');
-            // کلید باید مسیر نسبی باشد که کامپایلر انتظار دارد
             sources[currentPath] = { content: sourceCode };
 
             const importRegex = /import\s+"([^"]+)";/g;
             let match;
             while ((match = importRegex.exec(sourceCode)) !== null) {
                 let importPath = match[1];
-                let resolvedPath;
-                if (importPath.startsWith('@openzeppelin/')) {
-                    resolvedPath = 'node_modules/' + importPath;
-                } else {
-                    resolvedPath = path.join(path.dirname(currentPath), importPath);
+                // نرمال‌سازی مسیر برای import های نسبی
+                 if (importPath.startsWith('./') || importPath.startsWith('../')) {
+                    importPath = path.normalize(path.join(path.dirname(currentPath), importPath));
                 }
-                filesToProcess.push(resolvedPath);
+                filesToProcess.push(importPath);
             }
         }
 
@@ -107,11 +113,11 @@ function generateVerificationFiles() {
             sources: sources,
             settings: {
                 optimizer: { enabled: false, runs: 200 },
-                outputSelection: { "*": { "*": [ "abi", "evm.bytecode" ] } }
+                outputSelection: { "*": { "*": ["*"] } }
             }
         };
         
-        const contractName = path.basename(mainPath, '.sol');
+        const contractName = path.basename(mainFile, '.sol');
         const outputFilename = `verification_${contractName}.json`;
         fs.writeFileSync(outputFilename, JSON.stringify(verificationInput, null, 2));
         console.log(`  -> Created ${outputFilename}`);
