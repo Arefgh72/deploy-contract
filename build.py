@@ -1,12 +1,40 @@
 import os
 import json
-import subprocess
 from pathlib import Path
-import shutil
-from solcx import compile_files, install_solc, set_solc_version
+import re
+
+SOLC_VERSION = "0.8.28"  # نسخه کامپایلر مورد نظر
+
+def recursive_flatten(contract_path, contracts_dir, already_included=None):
+    if already_included is None:
+        already_included = set()
+    code = ""
+    with open(contract_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    for line in lines:
+        import_match = re.match(r'^\s*import\s+[\'"]([^\'"]+)[\'"]\s*;', line)
+        if import_match:
+            import_path = import_match.group(1)
+            # فقط فایل‌های داخلی را flatten کن
+            if not import_path.startswith("@") and not import_path.startswith("openzeppelin") and not import_path.startswith("http"):
+                full_import_path = (contracts_dir / import_path).resolve()
+                if full_import_path not in already_included:
+                    already_included.add(full_import_path)
+                    code += recursive_flatten(full_import_path, contracts_dir, already_included)
+            # اگر npm import است، می‌توانی به صورت comment بگذاری:
+            else:
+                code += f"// {line}"
+        else:
+            code += line
+    return code
 
 def build():
-    contract_folder = Path("contracts")
+    contracts_dir = Path("contracts")
+    output_dir = Path("flattened")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    verification_dir = Path("verification")
+    verification_dir.mkdir(parents=True, exist_ok=True)
+
     main_contract_files = [
         "YazdParadiseNFT.sol",
         "ParsToken.sol",
@@ -16,73 +44,49 @@ def build():
         "GenericToken.sol",
         "SimpleContract.sol"
     ]
-    main_contract_paths = [contract_folder / f for f in main_contract_files]
 
-    solc_version = "0.8.28"
-    install_solc(solc_version)
-    set_solc_version(solc_version)
+    for contract_file in main_contract_files:
+        contract_path = contracts_dir / contract_file
+        flatten_code = recursive_flatten(contract_path, contracts_dir)
+        
+        # اگر پراگما و SPDX نداشت، اضافه کن
+        if not re.search(r'pragma solidity', flatten_code):
+            flatten_code = f'pragma solidity ^{SOLC_VERSION};\n' + flatten_code
+        if not re.search(r'SPDX-License-Identifier:', flatten_code):
+            flatten_code = '// SPDX-License-Identifier: MIT\n' + flatten_code
 
-    compiled_sol = compile_files(
-        main_contract_paths,
-        output_values=["abi", "bin"],
-        import_remappings={"@openzeppelin/": "node_modules/@openzeppelin/"}
-    )
-    artifacts = {}
-    for contract_identifier, data in compiled_sol.items():
-        contract_name = contract_identifier.split(':')[-1]
-        artifacts[contract_name] = {
-            'abi': data['abi'],
-            'bytecode': '0x' + data['bin']
-        }
-    with open('artifacts.json', 'w') as f:
-        json.dump(artifacts, f, indent=2)
+        # خروجی فایل flatten
+        flattened_file_path = output_dir / contract_file
+        with open(flattened_file_path, "w", encoding="utf-8") as f:
+            f.write(flatten_code)
 
-    os.makedirs("flattened", exist_ok=True)
-
-    for contract_file_path in main_contract_paths:
-        flattened_output_path = f"flattened/{contract_file_path.name}"
-
-        # اگر قبلاً دایرکتوری با این اسم وجود دارد، حذف کن
-        if os.path.isdir(flattened_output_path):
-            shutil.rmtree(flattened_output_path)
-
-        # اگر قبلاً فایل خالی هست، حذف کن
-        if os.path.isfile(flattened_output_path):
-            os.remove(flattened_output_path)
-
-        try:
-            # با redirect خروجی به فایل
-            result = subprocess.run(
-                f"npx sol-merger \"{contract_file_path}\" > \"{flattened_output_path}\"",
-                shell=True, capture_output=True, text=True
-            )
-            print(f"\nFlattening {contract_file_path.name} ...")
-            print("stdout:", result.stdout)
-            print("stderr:", result.stderr)
-
-            # بررسی کن که فایل ساخته شده باشد و دایرکتوری نباشد
-            if not os.path.isfile(flattened_output_path):
-                print(f"Flattened file WAS NOT created for {contract_file_path.name}")
-                continue
-
-            with open(flattened_output_path, 'r') as f:
-                flattened_code = f.read()
-
-            verification_input = {
-                "language": "Solidity",
-                "sources": {contract_file_path.name: {"content": flattened_code}},
-                "settings": {
-                    "optimizer": {"enabled": False, "runs": 200},
-                    "outputSelection": {"*": {"*": ["*"]}}
+        # ساخت فایل verification input (جوس)
+        verification_input = {
+            "language": "Solidity",
+            "sources": {
+                contract_file: {
+                    "content": flatten_code
+                }
+            },
+            "settings": {
+                "optimizer": {
+                    "enabled": False,
+                    "runs": 200
+                },
+                "outputSelection": {
+                    "*": {
+                        "*": [
+                            "*"
+                        ]
+                    }
                 }
             }
-            output_filename = f"verification_{contract_file_path.stem}.json"
-            with open(output_filename, 'w') as f:
-                json.dump(verification_input, f, indent=2)
+        }
+        verification_file_path = verification_dir / f"verification_{contract_file.replace('.sol','.json')}"
+        with open(verification_file_path, "w", encoding="utf-8") as f:
+            json.dump(verification_input, f, indent=2)
 
-        except Exception as e:
-            print(f"Error processing {contract_file_path}: {e}")
+        print(f"Flattened and verification input created for {contract_file}")
 
 if __name__ == "__main__":
-    subprocess.run("npm install @openzeppelin/contracts sol-merger", shell=True, check=True)
     build()
