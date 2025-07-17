@@ -51,6 +51,7 @@ def build():
             os.remove(flattened_output_path)
 
         try:
+            # با redirect خروجی به فایل
             result = subprocess.run(
                 f"npx sol-merger \"{contract_file_path}\" > \"{flattened_output_path}\"",
                 shell=True, capture_output=True, text=True
