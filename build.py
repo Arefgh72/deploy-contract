@@ -46,22 +46,22 @@ def build():
         if os.path.isdir(flattened_output_path):
             shutil.rmtree(flattened_output_path)
 
+        # اگر قبلاً فایل خالی هست، حذف کن
+        if os.path.isfile(flattened_output_path):
+            os.remove(flattened_output_path)
+
         try:
             result = subprocess.run(
-                f"npx sol-merger \"{contract_file_path}\" \"{flattened_output_path}\"",
+                f"npx sol-merger \"{contract_file_path}\" > \"{flattened_output_path}\"",
                 shell=True, capture_output=True, text=True
             )
             print(f"\nFlattening {contract_file_path.name} ...")
             print("stdout:", result.stdout)
             print("stderr:", result.stderr)
 
-            if result.returncode != 0:
-                print(f"Flattening failed for {contract_file_path.name}")
-                continue
-
-            # بررسی کن که فایل ساخته شده باشد
+            # بررسی کن که فایل ساخته شده باشد و دایرکتوری نباشد
             if not os.path.isfile(flattened_output_path):
-                print(f"Flattened file wasn't created for {contract_file_path.name}")
+                print(f"Flattened file WAS NOT created for {contract_file_path.name}")
                 continue
 
             with open(flattened_output_path, 'r') as f:
