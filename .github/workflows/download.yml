@@ -1,9 +1,9 @@
-name: Download OpenZeppelin Contracts
+name: Download & Commit OpenZeppelin Contracts
 
 on:
   workflow_dispatch:
     inputs:
-      version:
+      oz_version:
         description: 'OpenZeppelin Version'
         required: false
         default: '5.0.2'
@@ -26,3 +26,14 @@ jobs:
       - name: Download OpenZeppelin contracts
         run: |
           python download_openzeppelin.py
+
+      - name: Configure git user
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+      - name: Commit oz_src folder to repo
+        run: |
+          git add oz_src
+          git commit -m "Add OpenZeppelin contracts to oz_src" || echo "No changes to commit"
+          git push
