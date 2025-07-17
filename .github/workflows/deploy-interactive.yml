@@ -45,14 +45,10 @@ jobs:
           cp verification_*.json ./public/ || echo "No verification files found"
           ls -R public/  # لاگ برای چک کردن فایل‌ها
 
+      - name: Install gh-pages
+        run: npm install -g gh-pages
+
       - name: Deploy UI to GitHub Pages
-        uses: actions/setup-node@v4  # اضافه کردن برای اطمینان از دسترسی npm
-        with:
-          node-version: '20'
-        continue-on-error: true
-        run: |
-          npm install -g gh-pages
-          gh-pages -d public -b deploy-contract
+        run: gh-pages -d public -b deploy-contract
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
