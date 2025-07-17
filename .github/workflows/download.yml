@@ -1,0 +1,28 @@
+name: Download OpenZeppelin Contracts
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'OpenZeppelin Version'
+        required: false
+        default: '5.0.2'
+
+jobs:
+  download-oz-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install requirements (requests)
+        run: pip install requests
+
+      - name: Download OpenZeppelin contracts
+        run: |
+          python download_openzeppelin.py
