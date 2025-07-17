@@ -26,24 +26,22 @@ jobs:
       - name: Install Dependencies and Build
         run: |
           pip install -r requirements.txt
-          # این دستور تمام فایل‌های لازم مانند artifacts.json و verification_*.json را می‌سازد
+          npm install @openzeppelin/contracts sol-merger
           python build.py
 
-      # --- این مرحله کلیدی در نسخه‌های اخیر من جا افتاده بود ---
       - name: Prepare Ethers.js for Deployment
         run: |
           mkdir -p lib
           curl -L https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js -o lib/ethers.umd.min.js
 
-      # این مرحله تمام فایل‌های لازم را برای انتشار آماده می‌کند
       - name: Organize files for deployment
         run: |
-          mkdir public
+          mkdir -p public
           cp index.html ./public/
           cp deploy-ui.js ./public/
           cp artifacts.json ./public/
-          cp verification_*.json ./public/
-          cp -r lib ./public/
+          cp -r flattened ./public/
+          cp verification_*.json ./public/ || echo "No verification files found"
 
       - name: Deploy UI to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
