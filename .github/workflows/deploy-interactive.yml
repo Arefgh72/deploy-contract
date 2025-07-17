@@ -33,7 +33,7 @@ jobs:
         run: |
           mkdir -p public/lib
           curl -L https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js -o public/lib/ethers.umd.min.js
-          ls -l public/lib/  # لاگ برای چک کردن فایل
+          ls -l public/lib/  # بررسی وجود فایل
 
       - name: Organize files for deployment
         run: |
@@ -43,7 +43,12 @@ jobs:
           cp artifacts.json ./public/ || echo "No artifacts.json found"
           cp -r flattened ./public/ || echo "No flattened directory found"
           cp verification_*.json ./public/ || echo "No verification files found"
-          ls -R public/  # لاگ برای چک کردن فایل‌ها
+          ls -R public/  # بررسی فایل‌ها
+
+      - name: Set Git user identity
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
 
       - name: Install gh-pages
         run: npm install -g gh-pages
