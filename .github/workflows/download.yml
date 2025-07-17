@@ -8,6 +8,9 @@ on:
         required: false
         default: '5.0.2'
 
+permissions:
+  contents: write
+
 jobs:
   download-oz-contracts:
     runs-on: ubuntu-latest
@@ -27,13 +30,10 @@ jobs:
         run: |
           python download_openzeppelin.py
 
-      - name: Configure git user
+      - name: Commit oz_src folder to repo
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-
-      - name: Commit oz_src folder to repo
-        run: |
           git add oz_src
           git commit -m "Add OpenZeppelin contracts to oz_src" || echo "No changes to commit"
           git push
